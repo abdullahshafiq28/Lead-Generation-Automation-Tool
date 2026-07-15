@@ -1,0 +1,17 @@
+# --- Secrets: NEVER commit real keys ---
+.env
+*.local
+
+# macOS
+.DS_Store
+
+# Node / n8n
+node_modules/
+*.log
+.n8n/
+.n8n-files/
+
+# Editors
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,715 @@
+{
+  "id": "leadgen0000000001",
+  "name": "Lead Generation Automation",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "keyword",
+              "value": "engineer",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "location",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "maxLeads",
+              "value": 30,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { content: { parts: [ { text: $json.keyword } ] }, outputDimensionality: 256 } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "embed-keyword",
+      "name": "Embed Keyword (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -220,
+        600
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://remoteok.com/api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (LeadGenDemo; contact@example.com)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "remoteok",
+      "name": "RemoteOK",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -220,
+        180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://www.arbeitnow.com/api/job-board-api",
+        "options": {}
+      },
+      "id": "arbeitnow",
+      "name": "Arbeitnow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -220,
+        420
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize RemoteOK jobs into our common lead shape and filter by keyword.\n// RemoteOK returns a JSON array; n8n emits one item per element. The very\n// first element is API metadata (legal notice) and has no id/position.\nconst cfg = $('Config').first().json;\nconst keywords = String(cfg.keyword || '')\n  .toLowerCase().split(',').map(s => s.trim()).filter(Boolean);\n\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  if (!j.id || !j.position) continue;            // skip metadata / malformed\n  const role = String(j.position || '').trim();\n  const tags = Array.isArray(j.tags) ? j.tags : [];\n  const haystack = (role + ' ' + tags.join(' ')).toLowerCase();\n  if (keywords.length && !keywords.some(k => haystack.includes(k))) continue;\n\n  out.push({ json: {\n    company: String(j.company || '').trim(),\n    role,\n    location: String(j.location || '').replace(/,\\s*$/, '').trim() || 'Remote',\n    url: String(j.url || j.apply_url || ''),\n    tags,\n    source: 'RemoteOK',\n    email: '',\n  }});\n}\nreturn out;\n"
+      },
+      "id": "normalize-remoteok",
+      "name": "Normalize RemoteOK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Arbeitnow jobs into our common lead shape and filter by keyword.\n// Arbeitnow returns an object { data: [...] } as a single item.\nconst cfg = $('Config').first().json;\nconst keywords = String(cfg.keyword || '')\n  .toLowerCase().split(',').map(s => s.trim()).filter(Boolean);\n\n// Collect the job records defensively (handles single object or split items).\nconst jobs = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  if (Array.isArray(j.data)) jobs.push(...j.data);\n  else if (j.company_name || j.title) jobs.push(j);\n}\n\nconst out = [];\nfor (const j of jobs) {\n  const role = String(j.title || '').trim();\n  const tags = Array.isArray(j.tags) ? j.tags : [];\n  const haystack = (role + ' ' + tags.join(' ')).toLowerCase();\n  if (keywords.length && !keywords.some(k => haystack.includes(k))) continue;\n\n  out.push({ json: {\n    company: String(j.company_name || '').trim(),\n    role,\n    location: String(j.location || '').trim() || (j.remote ? 'Remote' : ''),\n    url: String(j.url || ''),\n    tags,\n    source: 'Arbeitnow',\n    email: '',\n  }});\n}\nreturn out;\n"
+      },
+      "id": "normalize-arbeitnow",
+      "name": "Normalize Arbeitnow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "merge-sources",
+      "name": "Merge Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean + normalise fields, remove duplicates, guess a company domain for\n// enrichment, and cap the list so we stay within Hunter's free quota.\nconst cfg = $('Config').first().json;\nconst maxLeads = Number(cfg.maxLeads) || 30;\n\nfunction cleanCompany(name) {\n  return String(name || '').replace(/\\s+/g, ' ').trim();\n}\nfunction normKey(s) {\n  return String(s || '')\n    .toLowerCase()\n    .replace(/\\b(inc|llc|ltd|gmbh|corp|co|company|group|the)\\b/g, '')\n    .replace(/[^a-z0-9]/g, '');\n}\nfunction guessDomain(company) {\n  const base = normKey(company);\n  return base ? base + '.com' : '';\n}\n\nconst seen = new Set();\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  const company = cleanCompany(j.company);\n  const role = String(j.role || '').replace(/\\s+/g, ' ').trim();\n  if (!company || !role) continue;                 // drop records missing core fields\n\n  const key = normKey(company) + '|' + normKey(role);\n  if (seen.has(key)) continue;                     // de-duplicate on company+role\n  seen.add(key);\n\n  out.push({ json: {\n    company,\n    role,\n    location: String(j.location || '').replace(/\\s+/g, ' ').trim() || 'Not specified',\n    url: String(j.url || ''),\n    tags: Array.isArray(j.tags) ? j.tags : [],\n    source: String(j.source || ''),\n    domain: guessDomain(company),\n    email: 'not found',\n  }});\n\n  if (out.length >= maxLeads) break;               // protect Hunter free-tier credits\n}\nreturn out;\n"
+      },
+      "id": "clean-and-dedupe",
+      "name": "Clean & Dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.hunter.io/v2/domain-search?domain={{ $json.domain }}&limit=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1200
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "enrich-hunter",
+      "name": "Enrich Emails (Hunter)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "hunter-key",
+          "name": "Hunter API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pair each Hunter response back to its source lead (order is preserved) and\n// attach the best email found. Gracefully handles no-email / API errors.\nconst sources = $('Clean & Dedupe').all();\nconst responses = $input.all();\n\nconst out = [];\nfor (let i = 0; i < responses.length; i++) {\n  const lead = { ...(sources[i] ? sources[i].json : responses[i].json) };\n  const body = responses[i].json || {};\n  const data = body.data || {};\n\n  let email = 'not found';\n  let confidence = 0;\n  if (Array.isArray(data.emails) && data.emails.length) {\n    // Prefer a generic/role email for outreach, else the highest-confidence one.\n    const sorted = [...data.emails].sort((a, b) => (b.confidence || 0) - (a.confidence || 0));\n    email = sorted[0].value || 'not found';\n    confidence = sorted[0].confidence || 0;\n  }\n  lead.email = email;\n  lead.email_confidence = confidence;\n  out.push({ json: lead });\n}\nreturn out;\n"
+      },
+      "id": "attach-email",
+      "name": "Attach Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { content: { parts: [ { text: $json.role } ] }, outputDimensionality: 256 } }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 2,
+              "batchInterval": 400
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "embed-role",
+      "name": "Embed Role (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1060,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lead score (0-100). The keyword-relevance component uses Gemini embedding\n// similarity when available, and falls back to rule-based keyword matching\n// when embeddings are absent (no API key / call failed). Other components\n// (seniority, location, email) stay rule-based.\nconst cfg = $('Config').first().json;\nconst wantKeywords = String(cfg.keyword || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);\nconst wantLocation = String(cfg.location || '').toLowerCase().trim();\nconst SENIORITY = ['chief', 'vp', 'vice president', 'head', 'director', 'principal', 'staff', 'lead', 'senior', 'sr.'];\n\n// Keyword embedding vector (null if the Embed Keyword step produced nothing).\nlet kwVec = null;\ntry { kwVec = $('Embed Keyword (Gemini)').first().json?.embedding?.values || null; } catch (e) { kwVec = null; }\n\nfunction cosine(a, b) {\n  let dot = 0, na = 0, nb = 0;\n  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }\n  return (na && nb) ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;\n}\n\nconst sources = $('Attach Email').all();   // the leads (all fields), paired by index\nconst responses = $input.all();            // Embed Role responses, paired by index\n\nconst out = [];\nfor (let i = 0; i < responses.length; i++) {\n  const j = { ...(sources[i] ? sources[i].json : responses[i].json) };\n  const role = String(j.role || '').toLowerCase();\n  const loc = String(j.location || '').toLowerCase();\n  const reasons = [];\n  let score = 0;\n\n  // 1) Keyword relevance \u2014 embedding similarity (0-40) or rule-based fallback (0-35)\n  const roleVec = responses[i].json?.embedding?.values || null;\n  if (kwVec && roleVec) {\n    const sim = cosine(kwVec, roleVec);\n    const pts = Math.round(Math.max(0, Math.min(1, (sim - 0.5) / 0.4)) * 40);\n    score += pts;\n    j.semantic_similarity = Math.round(sim * 1000) / 1000;\n    reasons.push(`semantic match ${j.semantic_similarity} (+${pts})`);\n  } else {\n    const hits = wantKeywords.filter(k => role.includes(k)).length;\n    if (hits > 0) { const pts = Math.min(35, 20 + hits * 15); score += pts; reasons.push(`keyword x${hits} (+${pts})`); }\n    j.semantic_similarity = '';\n  }\n\n  // 2) Seniority signal (20)\n  if (SENIORITY.some(s => role.includes(s))) { score += 20; reasons.push('seniority (+20)'); }\n\n  // 3) Location match (15) or remote-friendly (5)\n  if (wantLocation && loc.includes(wantLocation)) { score += 15; reasons.push('location match (+15)'); }\n  else if (loc.includes('remote')) { score += 5; reasons.push('remote (+5)'); }\n\n  // 4) A verified contact email was found (30)\n  if (j.email && j.email !== 'not found') {\n    const conf = Number(j.email_confidence) || 0;\n    const pts = conf >= 80 ? 30 : conf >= 50 ? 20 : 15;\n    score += pts; reasons.push(`email found conf ${conf} (+${pts})`);\n  }\n\n  j.score = Math.max(0, Math.min(100, score));\n  j.score_reasons = reasons.join('; ');\n  delete j.tags;      // internal only \u2014 keep the exported CSV clean\n  delete j.domain;    // internal (used for Hunter lookup)\n  out.push({ json: j });\n}\n\n// Rank best leads first.\nout.sort((a, b) => b.json.score - a.json.score);\nreturn out;\n"
+      },
+      "id": "score-leads",
+      "name": "Score Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-key",
+              "leftValue": "={{ $env.GEMINI_API_KEY }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "cond-provider",
+              "leftValue": "={{ $env.AI_PROVIDER || 'gemini' }}",
+              "rightValue": "gemini",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "llm-configured",
+      "name": "LLM configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// AI/ML stretch: build the Google Gemini request body for a one-line,\n// personalised outreach hook per lead. The model + key come from env vars\n// (GEMINI_MODEL / GEMINI_API_KEY), read by the HTTP node \u2014 never hard-coded.\nconst out = [];\nfor (const item of $input.all()) {\n  const j = { ...item.json };\n  const company = String(j.company || 'the company');\n  const role = String(j.role || 'the role');\n  const location = String(j.location || '').trim();\n\n  const prompt =\n    `Company: ${company}\\n` +\n    `Role they are hiring for: ${role}\\n` +\n    (location ? `Location: ${location}\\n` : '') +\n    `\\nWrite ONE friendly, specific first-line outreach hook (max 25 words) to send this company ` +\n    `about helping them hire for this role. Output only the single sentence \u2014 no greeting, no sign-off, ` +\n    `no quotes. Do not invent facts about the company.`;\n\n  j.geminiBody = {\n    systemInstruction: { parts: [{ text: 'You write concise, specific B2B sales outreach opening lines. Output only the single sentence, nothing else.' }] },\n    contents: [{ parts: [{ text: prompt }] }],\n    generationConfig: { maxOutputTokens: 120, temperature: 0.8 },\n  };\n  out.push({ json: j });\n}\nreturn out;\n"
+      },
+      "id": "build-gemini-request",
+      "name": "Build Gemini Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $env.GEMINI_MODEL || 'gemini-flash-lite-latest' }}:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.geminiBody }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 2,
+              "batchInterval": 500
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "outreach-gemini",
+      "name": "Outreach Hook (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1940,
+        160
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pair each Gemini response back to its lead (order preserved) and attach the\n// outreach hook. Continues gracefully if a single call errored.\nconst sources = $('Build Gemini Request').all();\nconst responses = $input.all();\n\nconst out = [];\nfor (let i = 0; i < responses.length; i++) {\n  const lead = { ...(sources[i] ? sources[i].json : responses[i].json) };\n  delete lead.geminiBody;                          // don't export the request payload\n\n  const body = responses[i].json || {};\n  let hook = 'not generated';\n  const parts = body?.candidates?.[0]?.content?.parts;\n  if (Array.isArray(parts) && parts.length && parts[0].text) {\n    hook = String(parts[0].text).replace(/^[\"'\\s]+|[\"'\\s]+$/g, '');\n  }\n  lead.outreach_hook = hook;\n  out.push({ json: lead });\n}\nreturn out;\n"
+      },
+      "id": "attach-hook",
+      "name": "Attach Hook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "leads.csv",
+          "headerRow": true
+        }
+      },
+      "id": "to-csv",
+      "name": "To CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ ($env.OUTPUT_DIR || 'output') }}/leads.csv",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "write-csv",
+      "name": "Write CSV File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-send",
+              "leftValue": "={{ $env.SEND_EMAIL || 'false' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "send-email-gate",
+      "name": "Send email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2820,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{ $env.SMTP_FROM || 'leadgen@example.com' }}",
+        "toEmail": "={{ $env.EMAIL_TO || 'husnainkhalid626@gmail.com' }}",
+        "subject": "Lead Generation \u2014 fresh scored leads",
+        "emailFormat": "text",
+        "text": "Attached: the latest de-duplicated, scored leads from the n8n automation.",
+        "options": {
+          "attachments": "data"
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3040,
+        180
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "RemoteOK",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Arbeitnow",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Embed Keyword (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RemoteOK": {
+      "main": [
+        [
+          {
+            "node": "Normalize RemoteOK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arbeitnow": {
+      "main": [
+        [
+          {
+            "node": "Normalize Arbeitnow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize RemoteOK": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Arbeitnow": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Sources": {
+      "main": [
+        [
+          {
+            "node": "Clean & Dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean & Dedupe": {
+      "main": [
+        [
+          {
+            "node": "Enrich Emails (Hunter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Emails (Hunter)": {
+      "main": [
+        [
+          {
+            "node": "Attach Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Email": {
+      "main": [
+        [
+          {
+            "node": "Embed Role (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Role (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Score Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Leads": {
+      "main": [
+        [
+          {
+            "node": "LLM configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM configured?": {
+      "main": [
+        [
+          {
+            "node": "Build Gemini Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "To CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Gemini Request": {
+      "main": [
+        [
+          {
+            "node": "Outreach Hook (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outreach Hook (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Attach Hook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Hook": {
+      "main": [
+        [
+          {
+            "node": "To CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "To CSV": {
+      "main": [
+        [
+          {
+            "node": "Write CSV File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write CSV File": {
+      "main": [
+        [
+          {
+            "node": "Send email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email?": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
