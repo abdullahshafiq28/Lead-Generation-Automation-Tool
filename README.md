@@ -269,3 +269,4 @@ important for a lead list a human will actually work through.
 - [x] **Embedding-based keyword similarity scoring** (Gemini `gemini-embedding-001`) with rule-based fallback
 - [x] **LLM-drafted personalised outreach hook per lead** (Google Gemini — optional, env-gated)
 - [x] **Email digest** — sends the CSV to a recipient (optional, off by default)
+---
