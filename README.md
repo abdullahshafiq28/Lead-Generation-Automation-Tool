@@ -101,13 +101,16 @@ Common lead schema produced by the pipeline:
 git clone <your-repo-url> LeadGenerationAutomationTool
 cd LeadGenerationAutomationTool
 
-# 2. (Optional) enable AI features — otherwise skip this line and scoring is rule-based
+# 2. Install n8n once (recommended — makes every startup instant)
+npm install -g n8n              # use: sudo npm install -g n8n  if you hit a permissions error
+
+# 3. (Optional) enable AI features — otherwise skip this line and scoring is rule-based
 cp .env.example .env            # then add GEMINI_API_KEY to .env
 
-# 3. Start n8n from the repo root (first run downloads it, ~2–3 min)
+# 4. Start n8n from the repo root
 ./start-n8n.command             # loads .env + allow-lists this folder for file output
 
-# 4. Open the editor
+# 5. Open the editor
 open http://localhost:5678      # create a local owner account (stored only on your machine)
 ```
 

@@ -2,8 +2,10 @@
 .env
 *.local
 
-# macOS
+# macOS / stray files
 .DS_Store
+*.rtf
+Untitled.*
 
 # Node / n8n
 node_modules/

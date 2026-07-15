@@ -13,9 +13,14 @@ Everything after the core run (Gemini AI, email) is **optional** — skip it and
 git clone <your-repo-url> LeadGenerationAutomationTool
 cd LeadGenerationAutomationTool
 cp .env.example .env          # optional — only if you want the AI / email features
+npm install -g n8n            # recommended: installs n8n once so startup is instant
 ```
 
-- Node.js LTS: https://nodejs.org — check with `node -v`  *(this is all you need)*
+- Node.js LTS: https://nodejs.org — check with `node -v`
+- **`npm install -g n8n`** (recommended, ~3–5 min once). The launcher works without it, but it
+  falls back to `npx n8n`, which **re-downloads n8n whenever a newer version is published**
+  (n8n ships almost daily) — that makes startup slow. A global install = instant every time.
+  *(If it errors with a permissions/`EACCES` message, use `sudo npm install -g n8n`.)*
 - Docker Desktop (only for Option A): https://www.docker.com/products/docker-desktop/
 
 > ℹ️ **The tool runs with zero keys.** Without `.env` you still get de-duplicated, scored

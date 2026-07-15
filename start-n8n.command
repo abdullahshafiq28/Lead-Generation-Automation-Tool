@@ -25,4 +25,14 @@ mkdir -p output
 echo "Starting n8n…"
 echo "  Project (writable by n8n): $(pwd)"
 echo "  Open http://localhost:5678 once it says 'Editor is now accessible'."
-npx -y n8n start
+
+# Prefer a globally-installed n8n (instant startup). `npx -y n8n` re-checks the
+# registry and re-downloads whenever a newer n8n is published — slow. For fast,
+# stable startup run once:  npm install -g n8n
+if command -v n8n >/dev/null 2>&1; then
+  echo "  Using global n8n ($(n8n --version 2>/dev/null))"
+  n8n start
+else
+  echo "  n8n not installed globally — using npx (may download; run 'npm install -g n8n' for instant starts)."
+  npx -y n8n start
+fi
